@@ -9,6 +9,9 @@ verify_ssl = true
 pytesseract = "*"
 opencv-python = "*"
 fuzzywuzzy = {extras = ["speedup"],version = "*"}
+easyocr = "*"
+p-tqdm = "*"
+pyyaml = "*"
 
 [requires]
-python_version = "3.7"
+python_version = "3.8"

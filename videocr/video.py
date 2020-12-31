@@ -1,9 +1,10 @@
 from __future__ import annotations
 from typing import List
 import sys
-import multiprocessing
 import pytesseract
 import cv2
+import easyocr
+from p_tqdm import p_imap
 
 from . import constants
 from . import utils
@@ -20,6 +21,7 @@ class Video:
     height: int
     pred_frames: List[PredictedFrame]
     pred_subs: List[PredictedSubtitle]
+    engine: str
 
     def __init__(self, path: str):
         self.path = path
@@ -29,9 +31,10 @@ class Video:
             self.height = int(v.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     def run_ocr(self, lang: str, time_start: str, time_end: str,
-                conf_threshold: int, use_fullframe: bool) -> None:
+                conf_threshold: int, use_fullframe: bool, engine: str) -> None:
         self.lang = lang
         self.use_fullframe = use_fullframe
+        self.engine = engine
 
         ocr_start = utils.get_frame_index(time_start, self.fps) if time_start else 0
         ocr_end = utils.get_frame_index(time_end, self.fps) if time_end else self.num_frames
@@ -41,14 +44,14 @@ class Video:
         num_ocr_frames = ocr_end - ocr_start
 
         # get frames from ocr_start to ocr_end
-        with Capture(self.path) as v, multiprocessing.Pool() as pool:
+        with Capture(self.path) as v:
             v.set(cv2.CAP_PROP_POS_FRAMES, ocr_start)
             frames = (v.read()[1] for _ in range(num_ocr_frames))
 
             # perform ocr to frames in parallel
-            it_ocr = pool.imap(self._image_to_data, frames, chunksize=10)
+            it_ocr = p_imap(self._image_to_data, list(frames))
             self.pred_frames = [
-                PredictedFrame(i + ocr_start, data, conf_threshold)
+                PredictedFrame(i + ocr_start, data, conf_threshold, self.engine)
                 for i, data in enumerate(it_ocr)
             ]
 
@@ -58,7 +61,14 @@ class Video:
             img = img[self.height // 2:, :]
         config = '--tessdata-dir "{}"'.format(constants.TESSDATA_DIR)
         try:
-            return pytesseract.image_to_data(img, lang=self.lang, config=config)
+            if self.engine == 'tesseract':
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                data = pytesseract.image_to_data(img, lang=self.lang, config=config)
+                return data
+            elif self.engine == 'easyocr':
+                reader = easyocr.Reader(self.lang.split('+'))
+                data = reader.readtext(img)
+                return data
         except Exception as e:
             sys.exit('{}: {}'.format(e.__class__.__name__, e))
 
