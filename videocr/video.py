@@ -6,8 +6,7 @@ import cv2
 import easyocr
 from p_tqdm import p_imap
 
-from . import constants
-from . import utils
+from . import utils, constants
 from .models import PredictedFrame, PredictedSubtitle
 from .opencv_adapter import Capture
 
@@ -61,13 +60,13 @@ class Video:
             img = img[self.height // 2:, :]
         config = '--tessdata-dir "{}"'.format(constants.TESSDATA_DIR)
         try:
-            if self.engine == 'tesseract':
+            if self.engine == constants.OCR_ENGINE_TESSERACT:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 data = pytesseract.image_to_data(img, lang=self.lang, config=config)
                 return data
-            elif self.engine == 'easyocr':
+            elif self.engine == constants.OCR_ENGINE_EASYOCR:
                 reader = easyocr.Reader(self.lang.split('+'))
-                data = reader.readtext(img)
+                data = reader.readtext(img, paragraph=True)
                 return data
         except Exception as e:
             sys.exit('{}: {}'.format(e.__class__.__name__, e))
